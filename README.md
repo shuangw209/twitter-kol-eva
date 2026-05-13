@@ -206,6 +206,14 @@ uv run tweval doctor
 
 ## 日常使用
 
+> ⚠️ **每次新开终端都要先 cd 进项目目录**，否则 `uv run` 找不到这个项目的环境，会报 `Failed to spawn: tweval`。
+>
+> ```bash
+> cd ~/twitter-kol-eva
+> ```
+>
+> （路径取决于你 clone 在哪——如果你忘了，可以直接打 `cd` 然后回车，再 `find ~ -name twitter-kol-eva -type d 2>/dev/null` 找。）
+
 ### 最简单的用法
 
 ```bash
@@ -286,6 +294,16 @@ CPM 在游戏行业可能是 5 美元，在科技 B2B 可能是 50 美元——*
 
 ## 出问题怎么办
 
+### "Failed to spawn: tweval" / "No such file or directory (os error 2)"
+最常见的失误之一：你新开了终端但没有先 cd 进项目目录。`uv run` 是相对于当前目录找项目环境的。先：
+```bash
+cd ~/twitter-kol-eva
+```
+然后再跑你的 `uv run tweval ...` 命令。如果忘了 clone 到哪，可以：
+```bash
+find ~ -name twitter-kol-eva -type d 2>/dev/null
+```
+
 ### "uv: command not found"
 你装了 uv 但终端找不到。解决：**关掉终端再开一个新的**，或者重启电脑。
 
@@ -294,6 +312,9 @@ CPM 在游戏行业可能是 5 美元，在科技 B2B 可能是 50 美元——*
 ```bash
 uv run playwright install chromium
 ```
+
+### `tweval login` 时输完用户名又被弹回输入页（或被 Google 拦着）
+Twitter / Google 检测到自动化浏览器了。**走路径 B（手动导出）**——见上面"第 5 步"的"路径 B"，用 Cookie-Editor 扩展从你日常 Chrome 里导出 cookie，然后 `uv run tweval import-cookies`。这条路 100% 能成。
 
 ### 跑 `evaluate` 时报 `Auth problem: Twitter is asking us to log in`
 你的 cookie 过期了（一般几周一次）。重新导出：
