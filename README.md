@@ -99,35 +99,47 @@ cp .env.example .env
 
 > 这一步在干嘛：把模板复制一份成 `.env`，工具运行时会读这个文件。
 
-**默认值就能跑，你可以直接进下一步**——`.env` 里面预设的是：
+**默认值就能跑，你可以直接进下一步（第 5 步）**——`.env` 里面预设的就是下面这些值，不改也能用：
+
 ```
-TWITTER_COOKIE_FILE=~/.twitter_cookies.json   # cookie 存在哪
-DEFAULT_CURRENCY=USD                           # 报价单位标签
-DEFAULT_RECENT_N=20                            # 默认采样多少条推文
+TWITTER_COOKIE_FILE=~/.twitter_cookies.json
+DEFAULT_CURRENCY=USD
+DEFAULT_RECENT_N=20
 ```
 
-#### 想看 / 改 `.env` 的话怎么打开它？
+含义分别是：cookie 文件存在哪、报价单位标签、默认采样多少条推文。
 
-`.env` 是"以点开头"的文件，Mac 的 Finder 和 Windows 的资源管理器默认会隐藏它。**最简单的做法是在终端里用编辑器命令直接开：**
+#### （可选）想看 / 改 `.env` 的话怎么打开它？
 
-**Mac**（在 twitter-kol-eva 目录下）：
+`.env` 是"以点开头"的文件，Mac 的 Finder 和 Windows 的资源管理器默认会隐藏它。最简单的做法是在终端里用编辑器命令直接打开。
+
+> ⚠️ **下面的命令直接复制整行就好，不要再加任何文字或 `#` 注释**——某些 shell（比如 Mac 默认的 zsh 交互模式）不会把 `#` 当注释，会把后面的字也当成文件名报错。
+
+**Mac**（在 twitter-kol-eva 目录下）。用系统自带的 TextEdit：
 ```bash
-open -e .env       # 用系统自带的 TextEdit 打开
-# 或者，装了 VS Code 的话：
+open -e .env
+```
+
+装了 VS Code 的话（命令行工具要先装好）：
+```bash
 code .env
 ```
-（如果想在 Finder 里看到隐藏文件，按 `Cmd + Shift + .` 切换显示。）
+
+如果想在 Finder 里看到隐藏文件，按 `Cmd + Shift + .` 切换显示。
 
 **Windows**（PowerShell）：
 ```powershell
 notepad .env
 ```
 
-**Linux**：
+**Linux**。终端内编辑（按 `Ctrl+O` 保存、`Ctrl+X` 退出）：
 ```bash
-nano .env          # 终端内编辑，Ctrl+O 保存、Ctrl+X 退出
-# 或者：
-gedit .env         # 图形界面（如果装了）
+nano .env
+```
+
+或者图形界面（如果装了）：
+```bash
+gedit .env
 ```
 
 ### 第 5 步：登录 Twitter，导出 cookie（最关键一步）
