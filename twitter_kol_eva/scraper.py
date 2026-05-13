@@ -52,7 +52,7 @@ async def scrape_profile(
     cookie_file: str | os.PathLike,
     recent_n: int = 20,
     headless: bool = True,
-    request_timeout_ms: int = 20_000,
+    request_timeout_ms: int = 30_000,
 ) -> ProfileResult:
     """Scrape a Twitter profile and return up to `recent_n` original tweets."""
     try:
@@ -104,9 +104,12 @@ async def scrape_profile(
             pass
 
         try:
+            # `networkidle` is unreliable on Twitter — the page never goes idle
+            # because of streaming connections. Use `domcontentloaded` for the
+            # initial nav and then explicitly wait for profile content to render.
             await page.goto(
                 f"https://x.com/{handle}",
-                wait_until="networkidle",
+                wait_until="domcontentloaded",
                 timeout=request_timeout_ms,
             )
         except Exception as e:
@@ -122,6 +125,25 @@ async def scrape_profile(
             raise TwitterAuthError(
                 "Twitter is asking us to log in. Your cookie file is missing or "
                 "expired. Re-export it (see README) and try again."
+            )
+
+        # Wait for profile body to actually render — either the followers anchor
+        # (real profile) or a "Account doesn't exist" / suspended notice.
+        try:
+            await page.wait_for_selector(
+                'a[href$="/followers"], [data-testid="emptyState"], '
+                '[data-testid="primaryColumn"]',
+                timeout=request_timeout_ms,
+            )
+            # Give the timeline a beat to start populating before we try to read.
+            await asyncio.sleep(2)
+        except Exception:
+            await browser.close()
+            raise TwitterScrapeError(
+                f"Profile page for @{handle} loaded but no profile content rendered. "
+                "Possible causes: handle does not exist, account suspended, "
+                "Twitter is rate-limiting, or your cookie is for a different region. "
+                "Try the URL in your normal browser to confirm the account exists."
             )
 
         # Followers
