@@ -34,14 +34,23 @@ from twitter_kol_eva.url_utils import parse_handle, profile_url
 
 
 def _load_env() -> None:
-    """Load .env into os.environ if python-dotenv is available; otherwise no-op."""
+    """Load .env from the current directory into os.environ.
+
+    python-dotenv is now a hard dependency, so this should always succeed
+    when the user has run `uv sync`. We still wrap it in try/except so a
+    missing dep degrades to a clear runtime error rather than an import crash
+    on package load.
+    """
     try:
         from dotenv import load_dotenv  # type: ignore
-
-        load_dotenv()
     except ImportError:
-        # .env support is optional; environment vars still work.
-        pass
+        click.echo(
+            "[warn] python-dotenv is not installed; .env will not be auto-loaded. "
+            "Run `uv sync` to install dependencies, or pass --cookie-file directly.",
+            err=True,
+        )
+        return
+    load_dotenv()
 
 
 @click.group()
