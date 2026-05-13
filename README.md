@@ -146,13 +146,14 @@ gedit .env
 
 这一步本质上是：用真实浏览器登录一次 Twitter，把登录状态保存到一个本地文件，让程序能"借"你的登录态去看推文页面。
 
-**直接打这条命令，工具会全程引导你：**
+#### 路径 A：自动登录（先试这个）
+
 ```bash
 uv run tweval login
 ```
 
 会发生什么：
-1. 一个 Chromium 浏览器窗口自动弹出，打开 X 的登录页
+1. 一个浏览器窗口自动弹出，打开 X 的登录页（优先用你系统装的 Chrome；没装就用 Playwright 自带的 Chromium）
 2. 你像平时一样输用户名 + 密码（如果有 2FA 就过 2FA）
 3. 登录成功，看到自己的 home timeline 之后，**回到终端按一下回车**
 4. 程序会把 cookie 存到 `~/.twitter_cookies.json`，然后自动关闭浏览器
@@ -160,6 +161,36 @@ uv run tweval login
 > 这一步在干嘛：让脚本以"已登录的你"身份去访问 Twitter，否则 Twitter 会要求登录，曝光数也看不到。
 >
 > **重要：** 这个 cookie 文件等于你的登录令牌，**不要分享、不要传到任何 repo**。`.gitignore` 已经把它拦在 git 之外。
+
+#### 路径 B：手动导出（如果路径 A 卡在登录页 / 输完账号弹回）
+
+Twitter / X 有时候会识别出 Playwright 自动化的浏览器并拒绝登录——表现就是"输完用户名点 Next 又弹回输入页面"。这种情况下走手动路径，**100% 能成功**。
+
+**操作步骤（Mac / Windows / Linux 通用）：**
+
+1. 用你**平时刷 Twitter 的那个 Chrome**（不是脚本弹的那个），确保已经登录了 https://x.com。
+
+2. 给 Chrome 装一个叫 **Cookie-Editor** 的扩展：
+   - 装：https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm
+
+3. 在已经登录 X 的那个 Chrome 标签里：
+   - 点右上角 Cookie-Editor 扩展图标
+   - 看到 cookie 列表后，点底部 **Export** → 选 **Export as JSON**
+   - JSON 内容现在在你的剪贴板里
+
+4. 跑工具自带的转换命令（它会从剪贴板读取，转成 Playwright 格式，存到默认路径）：
+
+   ```bash
+   uv run tweval import-cookies
+   ```
+
+   你也可以指定文件输入：把 JSON 粘贴存成 `/tmp/raw.json`，然后：
+
+   ```bash
+   uv run tweval import-cookies --input /tmp/raw.json
+   ```
+
+5. 跑一下 `uv run tweval doctor` 验证一下，看到 "Cookie file readable (N cookies)" 就 OK 了。
 
 ### 第 6 步：自检
 

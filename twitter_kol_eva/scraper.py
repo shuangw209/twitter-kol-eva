@@ -71,7 +71,21 @@ async def scrape_profile(
         )
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=headless)
+        # Prefer system Chrome (Twitter is friendlier to it), fall back to Chromium.
+        browser = None
+        for channel_attempt in ("chrome", None):
+            try:
+                kwargs: dict = {"headless": headless}
+                if channel_attempt:
+                    kwargs["channel"] = channel_attempt
+                browser = await p.chromium.launch(**kwargs)
+                break
+            except Exception:
+                continue
+        if browser is None:
+            raise TwitterScrapeError(
+                "Could not launch any browser. Run: uv run playwright install chromium"
+            )
         context = await browser.new_context(
             storage_state=str(cookie_path),
             user_agent=(
@@ -81,6 +95,13 @@ async def scrape_profile(
             ),
         )
         page = await context.new_page()
+        # Apply stealth to mask common automation flags (best-effort).
+        try:
+            from playwright_stealth import Stealth  # type: ignore
+
+            await Stealth().apply_stealth_async(page)
+        except Exception:
+            pass
 
         try:
             await page.goto(

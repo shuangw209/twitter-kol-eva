@@ -202,21 +202,69 @@ def login(cookie_file: str | None) -> None:
 
 
 async def _login_flow(target_path: str) -> None:
+    """Open a browser, wait for the user to log in, then save storage state.
+
+    Twitter / X aggressively blocks Playwright's stock Chromium during login
+    (the username step silently bounces back). To improve the odds we:
+        1. Prefer the user's *system* Chrome (channel="chrome") over bundled
+           Chromium — Twitter's automation heuristics tolerate it better.
+        2. Apply playwright-stealth to mask the automation flags.
+        3. If both fail, the README documents a manual cookie-export fallback
+           using a browser extension.
+    """
     try:
         from playwright.async_api import async_playwright
     except ImportError:
-        click.echo("Playwright not installed. Run: uv sync && uv run playwright install chromium", err=True)
+        click.echo(
+            "Playwright not installed. Run: uv sync && uv run playwright install chromium",
+            err=True,
+        )
         sys.exit(2)
 
     console = Console()
-    console.print(
-        "[cyan]Opening a Chromium window — log in to https://x.com, then come back here.[/cyan]"
-    )
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False)
+        browser = None
+        chosen_channel: str | None = None
+        for channel_attempt in ("chrome", None):
+            try:
+                kwargs: dict = {"headless": False}
+                if channel_attempt:
+                    kwargs["channel"] = channel_attempt
+                browser = await p.chromium.launch(**kwargs)
+                chosen_channel = channel_attempt
+                break
+            except Exception:
+                continue
+        if browser is None:
+            click.echo(
+                "Could not launch any browser. Run: uv run playwright install chromium",
+                err=True,
+            )
+            sys.exit(2)
+
+        if chosen_channel == "chrome":
+            console.print("[dim]Using your system Chrome.[/dim]")
+        else:
+            console.print(
+                "[yellow]Using bundled Chromium (system Chrome not found).[/yellow]\n"
+                "[yellow]Twitter sometimes blocks login in Chromium — if the "
+                "username page bounces back, see the README's 'manual cookie "
+                "export' section.[/yellow]"
+            )
+
         context = await browser.new_context()
         page = await context.new_page()
+        try:
+            from playwright_stealth import Stealth  # type: ignore
+
+            await Stealth().apply_stealth_async(page)
+        except Exception:
+            pass  # Stealth is best-effort.
+
+        console.print(
+            "[cyan]A browser window is opening — log in to https://x.com, then come back here.[/cyan]"
+        )
         await page.goto("https://x.com/login", wait_until="domcontentloaded")
 
         click.echo("\nWhen you've logged in and you can see your home timeline,")
@@ -227,6 +275,138 @@ async def _login_flow(target_path: str) -> None:
         await browser.close()
 
     console.print(f"[green]✓[/green] Cookies saved to [bold]{target_path}[/bold]")
+
+
+@main.command(name="import-cookies")
+@click.option(
+    "--input",
+    "input_path",
+    type=click.Path(),
+    default=None,
+    help="Path to a JSON file exported by Cookie-Editor. Default: read from clipboard.",
+)
+@click.option(
+    "--cookie-file",
+    type=click.Path(),
+    default=None,
+    help="Where to save the Playwright-format cookie JSON (default env TWITTER_COOKIE_FILE).",
+)
+def import_cookies(input_path: str | None, cookie_file: str | None) -> None:
+    """Convert a Cookie-Editor JSON export into Playwright storage_state format.
+
+    Use this when `tweval login` cannot get past Twitter's automation block.
+    Steps:
+        1. In your normal Chrome (already logged in to x.com), use the
+           Cookie-Editor extension's "Export as JSON" button.
+        2. Run `tweval import-cookies` — it reads the JSON from clipboard
+           (or from --input PATH) and writes a Playwright storage_state file
+           to TWITTER_COOKIE_FILE.
+    """
+    import json
+
+    console = Console()
+
+    # Resolve target cookie file
+    cookie_file = cookie_file or os.environ.get("TWITTER_COOKIE_FILE")
+    if not cookie_file:
+        console.print(
+            "[red]No cookie file path configured.[/red] Set TWITTER_COOKIE_FILE or pass --cookie-file."
+        )
+        sys.exit(2)
+    target = Path(cookie_file).expanduser()
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    # Read source JSON
+    if input_path:
+        raw_text = Path(input_path).expanduser().read_text(encoding="utf-8")
+    else:
+        try:
+            import subprocess
+
+            # Mac
+            r = subprocess.run(["pbpaste"], capture_output=True, text=True, timeout=5)
+            if r.returncode == 0 and r.stdout.strip():
+                raw_text = r.stdout
+            else:
+                raise RuntimeError("pbpaste returned empty")
+        except Exception:
+            try:
+                # Linux with xclip
+                import subprocess
+
+                r = subprocess.run(
+                    ["xclip", "-selection", "clipboard", "-o"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+                if r.returncode == 0 and r.stdout.strip():
+                    raw_text = r.stdout
+                else:
+                    raise RuntimeError("xclip returned empty")
+            except Exception:
+                console.print(
+                    "[red]Could not read from clipboard.[/red] "
+                    "Save the JSON to a file and pass --input PATH."
+                )
+                sys.exit(2)
+
+    try:
+        data = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        console.print(f"[red]Input is not valid JSON:[/red] {e}")
+        sys.exit(2)
+
+    if not isinstance(data, list):
+        console.print(
+            "[red]Expected a list of cookies (Cookie-Editor 'Export as JSON' format).[/red]"
+        )
+        sys.exit(2)
+
+    storage = {"cookies": [_convert_cookie(c) for c in data if isinstance(c, dict)], "origins": []}
+
+    # Sanity: must contain at least one Twitter auth cookie
+    names = {c.get("name") for c in storage["cookies"]}
+    if not (names & {"auth_token", "ct0"}):
+        console.print(
+            "[yellow]Warning:[/yellow] no auth_token / ct0 in the import — "
+            "are you sure these are Twitter / X cookies?"
+        )
+
+    target.write_text(json.dumps(storage, indent=2), encoding="utf-8")
+    console.print(
+        f"[green]✓[/green] Imported [bold]{len(storage['cookies'])}[/bold] cookies "
+        f"to [bold]{target}[/bold]"
+    )
+
+
+def _convert_cookie(c: dict) -> dict:
+    """Map a Cookie-Editor cookie dict to Playwright storage_state shape."""
+    same_site_map = {
+        "no_restriction": "None",
+        "lax": "Lax",
+        "strict": "Strict",
+        "unspecified": "Lax",
+        None: "Lax",
+    }
+    out: dict = {
+        "name": c.get("name", ""),
+        "value": c.get("value", ""),
+        "domain": c.get("domain", ""),
+        "path": c.get("path", "/"),
+        "httpOnly": bool(c.get("httpOnly", False)),
+        "secure": bool(c.get("secure", False)),
+        "sameSite": same_site_map.get(
+            (c.get("sameSite") or "lax").lower() if isinstance(c.get("sameSite"), str) else None,
+            "Lax",
+        ),
+    }
+    # Expiry: Cookie-Editor uses expirationDate; Playwright uses expires (-1 for session)
+    if "expirationDate" in c and c["expirationDate"] is not None:
+        out["expires"] = float(c["expirationDate"])
+    else:
+        out["expires"] = -1
+    return out
 
 
 @main.command()
