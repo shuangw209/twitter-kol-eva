@@ -97,14 +97,38 @@ uv run playwright install chromium
 cp .env.example .env
 ```
 
-打开 `.env` 这个文件（用 VS Code、Sublime、或者随便什么文本编辑器都行），里面长这样：
+> 这一步在干嘛：把模板复制一份成 `.env`，工具运行时会读这个文件。
+
+**默认值就能跑，你可以直接进下一步**——`.env` 里面预设的是：
 ```
-TWITTER_COOKIE_FILE=~/.twitter_cookies.json
-DEFAULT_CURRENCY=USD
-DEFAULT_RECENT_N=20
+TWITTER_COOKIE_FILE=~/.twitter_cookies.json   # cookie 存在哪
+DEFAULT_CURRENCY=USD                           # 报价单位标签
+DEFAULT_RECENT_N=20                            # 默认采样多少条推文
 ```
 
-`TWITTER_COOKIE_FILE` 是即将要导出的 cookie 文件路径，**先不用改**——下一步会自动创建在这里。
+#### 想看 / 改 `.env` 的话怎么打开它？
+
+`.env` 是"以点开头"的文件，Mac 的 Finder 和 Windows 的资源管理器默认会隐藏它。**最简单的做法是在终端里用编辑器命令直接开：**
+
+**Mac**（在 twitter-kol-eva 目录下）：
+```bash
+open -e .env       # 用系统自带的 TextEdit 打开
+# 或者，装了 VS Code 的话：
+code .env
+```
+（如果想在 Finder 里看到隐藏文件，按 `Cmd + Shift + .` 切换显示。）
+
+**Windows**（PowerShell）：
+```powershell
+notepad .env
+```
+
+**Linux**：
+```bash
+nano .env          # 终端内编辑，Ctrl+O 保存、Ctrl+X 退出
+# 或者：
+gedit .env         # 图形界面（如果装了）
+```
 
 ### 第 5 步：登录 Twitter，导出 cookie（最关键一步）
 
